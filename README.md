@@ -1,111 +1,89 @@
-# 🚦 Nordic Asphalt Pulse: Enterprise Data Lakehouse
-
-**Real-Time Traffic & Weather Analytics Pipeline for Finland**
+# 🚦 Nordic Asphalt Pulse: Real-Time Traffic & Weather Analytics for Finland
 
 ![Project Status](https://img.shields.io/badge/Status-Complete-green) ![Databricks](https://img.shields.io/badge/Platform-Databricks-orange) ![Python](https://img.shields.io/badge/Language-Python_3.9-blue)
 
-## 📖 Project Overview
+## 📖 What This Project Is About
 
-**Nordic Asphalt Pulse** is an end-to-end Data Engineering project simulating a production-grade Enterprise Data Lakehouse. It solves a classic "Big Data" problem: **How do we link two unrelated, real-time data streams—Physical Traffic Sensors and Atmospheric Weather Data—to explain traffic congestion?**
+**Nordic Asphalt Pulse** is my attempt at building a real, production-grade data pipeline that actually solves something interesting: figuring out why traffic jams happen in Finland. Is it because of a snowstorm? Rush hour? Both?
 
-Unlike standard tutorials using clean, static CSVs, this project tackles the "messy" reality of live data engineering:
-* **Scale:** Ingests live data from **50 strategic cities** across Finland (Helsinki to Lapland).
-* **Complexity:** Joins datasets that share no common ID using **Geospatial Nearest Neighbor** logic.
-* **Quality:** Handles real-world data issues (e.g., sensor outages, missing municipality tags, and winter temperature averaging errors).
+Here's the challenge I wanted to tackle. Most data engineering tutorials give you nice, clean CSV files that are perfectly formatted. Real life isn't like that. In the real world, you're dealing with messy JSON from IoT sensors, APIs that sometimes fail, and datasets that have absolutely nothing in common except maybe a timestamp.
 
-### 🎯 Key Engineering Achievements
-* **Automated Root Cause Analysis:** The pipeline automatically tags traffic jams as "Weather Impact" (Snow/Ice) vs. "High Volume" (Rush Hour).
-* **Spatio-Temporal Linkage:** Implemented a custom algorithm to map 500+ traffic stations to the nearest weather observation point dynamically.
-* **Data Quality Recovery:** Fixed "Warm Winter" data anomalies by switching aggregation logic from historical averages to strict time-windowed snapshots.
+So I built a pipeline that pulls live data from 50 cities across Finland (from Helsinki all the way up to Lapland), combines traffic sensor readings with weather data, and figures out what's actually causing congestion. The tricky part? These two data sources don't share any common identifiers. I had to build a custom geospatial algorithm to match each traffic sensor with its nearest weather station.
 
----
+### 🎯 What Makes This Interesting
 
-## 🏗️ Technical Architecture
+The pipeline doesn't just collect data. It actually thinks about what it's seeing:
 
-The project follows the **Medallion Architecture** on **Databricks (Delta Lake)**.
+When traffic slows down, it automatically tags the cause. Is it snowy and icy outside? Then it's probably a weather-related slowdown. Clear skies but 800+ cars passing through? That's just rush hour doing its thing.
 
-### 🥉 Bronze Layer (Raw Ingestion)
-* **Strategy:** ELT (Extract, Load, Transform).
-* **Sources:**
-    * **IoT Sensors:** Digitraffic.fi (GeoJSON payloads).
-    * **Weather API:** Open-Meteo (50-City High-Res Grid).
-* **Storage:** Delta Tables (`bronze_traffic_raw`, `bronze_weather_raw`).
-* **Design Pattern:** "Infinite Undo Button" — Raw JSON is stored as-is to allow reprocessing historical data if business logic changes.
+I also had to solve some real data quality issues. For example, the weather API was averaging historical temperature data in a way that made Finnish winters look warm (spoiler: they're not). I fixed that by switching to time-windowed snapshots instead of historical averages.
 
-### 🥈 Silver Layer (Cleaning & Parsing)
-* **Strategy:** Parse, Explode, and Standardize.
-* **Transformations:**
-    * Parsing nested JSON arrays into flat PySpark DataFrames.
-    * **Schema Evolution:** Handling missing metadata (e.g., null municipality names) by deriving location from coordinates.
-    * **Data Quality:** Filtering out sensor errors (e.g., speeds > 200 km/h or < 0 km/h).
+The geospatial matching algorithm was particularly fun to build. Instead of hardcoding which weather station belongs to which region, it calculates the actual distance between every traffic sensor and all 50 weather observation points, then picks the closest one. So if a sensor is sitting on the highway in Vantaa, it automatically gets matched with Helsinki-Vantaa weather data.
 
-### 🥇 Gold Layer (Enrichment & Business Logic)
-* **Strategy:** Intelligent Enrichment & Dimension Modeling.
-* **The "Nearest Neighbor" Algorithm:**
-    * Instead of hardcoding regions, the pipeline calculates the Euclidean distance between every traffic sensor and all 50 weather hubs.
-    * It automatically assigns the closest weather source (e.g., a sensor in *Vantaa* automatically inherits *Helsinki-Vantaa* weather).
-* **Business Logic:**
-    * **Traffic Status:** `CONGESTED` (< 60 km/h), `SLOW`, `FREE_FLOW`.
-    * **Road Condition:** `SNOWY`, `ICY`, `DRY`.
-    * **Root Cause:** Logic to determine if a jam is caused by Volume (`cars > 800`) or Weather (`snow > 0`).
+## 🏗️ How It's Built
 
----
+I followed the Medallion Architecture pattern on Databricks with Delta Lake. Think of it like a three-layer cake:
 
-## 🛠️ Tech Stack
+### 🥉 Bronze Layer (The Raw Stuff)
 
-| Component | Technology Used |
-| :--- | :--- |
-| **Cloud Platform** | Databricks (Community Edition) |
-| **Storage Engine** | Delta Lake (ACID Transactions, Schema Enforcement) |
-| **Compute** | Apache Spark (PySpark) |
-| **Languages** | Python 3.9, SQL |
-| **Visualization** | Folium (Interactive Geospatial Mapping) |
-| **Orchestration** | Databricks Notebook Workflows |
+This is where everything lands first. I'm pulling data from two sources: IoT traffic sensors via Digitraffic.fi and weather data from Open-Meteo covering 50 cities. Everything gets stored exactly as it arrives in Delta tables, no transformations yet.
 
----
+Why keep the raw data? Because if I need to change my business logic later (and I always do), I can reprocess everything from scratch without having to fetch it all over again. It's like having an infinite undo button.
 
-## 📊 Dataset Overview
+### 🥈 Silver Layer (Making Sense of the Mess)
 
-### 1. Traffic Data (Digitraffic.fi)
-* **Type:** IoT Sensor Stream.
-* **Coverage:** All major Finnish highways (E18, E75, etc.).
-* **Key Metrics:** `average_speed`, `volume`, `sensor_id`, `lat/lon`.
+Here's where I clean things up. The raw data comes in as nested JSON, so I parse it, flatten those arrays, and standardize the schema. 
 
-### 2. Environmental Data (Open-Meteo)
-* **Type:** Real-time Weather API.
-* **Grid:** 50 Strategic Hubs (Top population centers + Critical Northern Nodes).
-* **Key Metrics:** `temperature_c`, `snowfall_cm`, `wind_speed`, `weather_code`.
+Some sensors don't report their municipality names, so I derive locations from coordinates. I also filter out obvious sensor errors (cars going 250 km/h or negative speeds, because physics still matters).
 
----
+### 🥇 Gold Layer (The Smart Stuff)
 
-## 🚀 How to Run
+This is where the magic happens. The pipeline calculates distances between traffic sensors and weather stations using Euclidean geometry, then links them together. 
 
-To replicate this project in your own Databricks environment:
+Once the data is enriched, I apply business logic to categorize everything. Traffic is labeled as CONGESTED (under 60 km/h), SLOW, or FREE_FLOW. Roads are tagged as SNOWY, ICY, or DRY based on current conditions. And then comes the root cause analysis: is this jam happening because of high volume, or is Mother Nature making the roads terrible?
 
-1.  **Clone the Repo:**
-    ```bash
-    git clone [https://github.com/](https://github.com/)[YourUsername]/nordic_pulse.git
-    ```
-2.  **Import to Databricks:**
-    * Upload the `databricks/` folder to your Databricks Workspace.
-3.  **Initialize Database:**
-    * Run `00_setup/00_initialize_db.sql`.
-    * Run `00_setup/01_Dim_weather.py` (Creates the 50-city reference grid).
-4.  **Execute Pipeline:**
-    * Run `01_bronze/` notebooks to fetch data.
-    * Run `02_silver/` to process JSON.
-    * Run `03_gold/` to execute the Nearest Neighbor logic.
-5.  **View Analytics:**
-    * Open `04_analytics` to see the interactive Folium map and root cause analysis.
+## 🛠️ The Tech Stack
 
----
+| Component | What I Used |
+|-----------|-------------|
+| **Cloud Platform** | Databricks Community Edition |
+| **Storage** | Delta Lake for ACID transactions and schema enforcement |
+| **Compute** | Apache Spark with PySpark |
+| **Languages** | Python 3.9 and SQL |
+| **Visualization** | Folium for interactive maps |
+| **Orchestration** | Databricks Notebooks |
 
-## 📜 License & Citation
+## 📊 The Data Sources
 
-**License:** MIT License.
+### Traffic Data from Digitraffic.fi
 
-**Author:**
-**Bashiir Muhamed** - *Aspiring Data Engineer*
+This is live IoT sensor data from every major Finnish highway (think E18, E75, and friends). Each sensor reports its average speed, traffic volume, exact GPS coordinates, and a unique sensor ID.
 
-If you use this code for your own portfolio or research, please cite:
-> Bashiir. (2025). Nordic Asphalt Pulse: Enterprise Data Engineering Project. GitHub.
+### Weather Data from Open-Meteo
+
+Real-time weather information from 50 strategic points across Finland. I chose these locations based on population centers and critical northern nodes. Each point gives me temperature, snowfall, wind speed, and a weather condition code.
+
+## 🚀 Want to Try It Yourself?
+
+If you want to run this in your own Databricks environment:
+
+1. Clone the repository:
+```bash
+git clone https://github.com/[YourUsername]/nordic_pulse.git
+```
+
+2. Import the `databricks/` folder into your Databricks workspace.
+
+3. Set up the database by running `00_setup/00_initialize_db.sql`, then run `00_setup/01_Dim_weather.py` to create the 50-city reference grid.
+
+4. Execute the pipeline in order: start with the `01_bronze/` notebooks to fetch data, move to `02_silver/` for processing, then `03_gold/` for the geospatial magic.
+
+5. Check out the analytics in the `04_analytics` folder to see the interactive Folium maps and root cause analysis.
+
+## 📜 A Quick Note
+
+This project is MIT licensed and free to use. If you end up using this code for your own portfolio or learning, I'd appreciate a mention:
+
+> Bashiir Muhamed. (2025). Nordic Asphalt Pulse: Real-Time Traffic & Weather Data Pipeline. GitHub.
+
+I'm an aspiring data engineer, and this project represents what I love about this field: taking messy, real-world data and turning it into something that actually answers questions.
