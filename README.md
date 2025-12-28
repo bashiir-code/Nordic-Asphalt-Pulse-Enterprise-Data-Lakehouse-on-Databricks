@@ -89,14 +89,14 @@ To replicate this project in your own Databricks environment:
 2.  **Import to Databricks:**
     * Upload the `databricks/` folder to your Databricks Workspace.
 3.  **Initialize Database:**
-    * Run `00_setup/01_initialize_db.sql`.
-    * Run `00_setup/02_create_weather_dimensions.py` (Creates the 50-city reference grid).
+    * Run `00_setup/00_initialize_db.sql`.
+    * Run `00_setup/01_Dim_weather.py` (Creates the 50-city reference grid).
 4.  **Execute Pipeline:**
     * Run `01_bronze/` notebooks to fetch data.
     * Run `02_silver/` to process JSON.
     * Run `03_gold/` to execute the Nearest Neighbor logic.
 5.  **View Analytics:**
-    * Open `04_analytics/01_dashboard_view` to see the interactive Folium map and root cause analysis.
+    * Open `04_analytics` to see the interactive Folium map and root cause analysis.
 
 ---
 
